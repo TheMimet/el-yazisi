@@ -265,19 +265,28 @@
   }
 
   // Fotoğrafı küçült + JPEG'e çevir (iPhone HEIC dahil). Uzun kenar en fazla 2200 px.
-  function fileToJpegBase64(file, maxSide = 2200, quality = 0.88) {
+  // Gönderilecek görüntü: uzun kenar en fazla 2000 px. Önizleme ayrı ve küçük (bellek şişmesin).
+  function fileToJpegBase64(file, maxSide = 2000, quality = 0.85) {
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file);
       const img = new Image();
-      img.onload = () => {
-        const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-        const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+      const render = (side, q) => {
+        const scale = Math.min(1, side / Math.max(img.naturalWidth, img.naturalHeight));
         const c = document.createElement("canvas");
-        c.width = w; c.height = h;
-        c.getContext("2d").drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(url);
-        const dataUrl = c.toDataURL("image/jpeg", quality);
-        resolve({ base64: dataUrl.split(",")[1], preview: dataUrl });
+        c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        const out = c.toDataURL("image/jpeg", q);
+        c.width = c.height = 0; // iOS/Android: canvas belleğini hemen bırak
+        return out;
+      };
+      img.onload = () => {
+        try {
+          const dataUrl = render(maxSide, quality);
+          const preview = render(160, 0.6);
+          URL.revokeObjectURL(url);
+          img.src = "";
+          resolve({ base64: dataUrl.split(",")[1], preview });
+        } catch (e) { URL.revokeObjectURL(url); reject(new Error("Fotoğraf işlenemedi (bellek yetersiz olabilir)")); }
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Fotoğraf açılamadı")); };
       img.src = url;
@@ -335,9 +344,43 @@ Kurallar:
     throw lastErr;
   }
 
+  // fetch'i sarar: bağlantı kopması ("Failed to fetch", "Load failed", "network error") ve
+  // 90 sn zaman aşımı, status 0 ile tekrar denenebilir hataya dönüşür.
+  const NET_TIMEOUT_MS = 90000;
+  async function netFetch(url, opts) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), NET_TIMEOUT_MS);
+    try {
+      return await fetch(url, { ...opts, signal: ctrl.signal });
+    } catch (e) {
+      const err = new Error(ctrl.signal.aborted
+        ? "Bağlantı zaman aşımına uğradı."
+        : "Bağlantı koptu (internet ya da ekran kilidi).");
+      err.status = 0; err.network = true;
+      throw err;
+    } finally { clearTimeout(timer); }
+  }
+
+  // Ağ hatalarında aynı isteği bekleyerek tekrar dener (model değiştirmeden).
+  async function withNetRetry(fn, label) {
+    const waits = [2000, 5000, 10000];
+    for (let i = 0; ; i++) {
+      try { return await fn(); }
+      catch (e) {
+        if (!e.network || i >= waits.length) throw e;
+        onRetry(`${e.message} ${i + 2}. deneme…`);
+        await sleep(waits[i]);
+      }
+    }
+  }
+
   async function ocrGeminiOnce(b64, s, model) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
-    const res = await fetch(url, {
+    return withNetRetry(() => ocrGeminiRequest(url, b64, s), model);
+  }
+
+  async function ocrGeminiRequest(url, b64, s) {
+    const res = await netFetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", "x-goog-api-key": s.apiKey },
       body: JSON.stringify({
@@ -363,7 +406,10 @@ Kurallar:
   }
 
   async function ocrClaude(b64, s) {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    return withNetRetry(() => ocrClaudeRequest(b64, s), "claude");
+  }
+  async function ocrClaudeRequest(b64, s) {
+    const res = await netFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -381,7 +427,11 @@ Kurallar:
       }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error("Claude: " + (data.error?.message || res.status));
+    if (!res.ok) {
+      const err = new Error("Claude: " + (data.error?.message || res.status));
+      if (RETRYABLE.has(res.status) || res.status === 529) { err.network = true; err.status = res.status; }
+      throw err;
+    }
     const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("").trim();
     if (!text) throw new Error("Claude boş cevap döndü");
     return text;
@@ -410,12 +460,15 @@ Kurallar:
     $("pickBtn").disabled = true;
     $("thumbs").innerHTML = "";
     const pieces = [];
+    let wakeLock = null;
+    try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch {}
     try {
       for (let i = 0; i < files.length; i++) {
+        if (i > 0) await sleep(800);
         setStatus(st, `Sayfa ${i + 1}/${files.length} hazırlanıyor…`);
         const { base64, preview } = await fileToJpegBase64(files[i]);
         const im = document.createElement("img"); im.src = preview; $("thumbs").appendChild(im);
-        setStatus(st, `Sayfa ${i + 1}/${files.length} okunuyor… (10–30 sn sürebilir)`);
+        setStatus(st, `Sayfa ${i + 1}/${files.length} okunuyor… (10–30 sn)${files.length > 1 ? " — bitene kadar ekranı açık tutun" : ""}`);
         onRetry = (msg) => setStatus(st, `Sayfa ${i + 1}/${files.length}: ${msg}`, "warn");
         const pageText = await ocr(base64);
         pieces.push(pageText);
@@ -435,6 +488,7 @@ Kurallar:
       $("retryBtn").classList.remove("hidden");
     } finally {
       $("pickBtn").disabled = false;
+      try { if (wakeLock) await wakeLock.release(); } catch {}
     }
   }
 
@@ -461,8 +515,18 @@ Kurallar:
     if (res.status === 404) return { notes: [], sha: null };
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(ghError(res.status, data));
-    let notes = [];
-    try { notes = JSON.parse(b64ToUtf8(data.content || "")); } catch {}
+    let b64 = data.content || "";
+    // 1 MB üstü dosyalarda contents API içeriği boş döner: blob'dan oku (veri kaybını önler).
+    if (!b64 && data.size > 0 && data.sha) {
+      const blobUrl = `https://api.github.com/repos/${encodeURIComponent(settings.ghOwner)}/${encodeURIComponent(settings.ghRepo)}/git/blobs/${data.sha}`;
+      const br = await fetch(blobUrl, { headers: ghHeaders(), cache: "no-store" });
+      const bd = await br.json().catch(() => ({}));
+      if (!br.ok || !bd.content) throw new Error("Kayıt dosyası okunamadı, tekrar deneyin.");
+      b64 = bd.content;
+    }
+    let notes;
+    try { notes = JSON.parse(b64ToUtf8(b64)); }
+    catch { throw new Error("Kayıt dosyası okunamadı (bozuk olabilir). Kayıt yapılmadı."); }
     return { notes: Array.isArray(notes) ? notes : [], sha: data.sha };
   }
   async function ghWrite(notes, sha, message) {
@@ -503,7 +567,12 @@ Kurallar:
       createdAt: new Date().toISOString(),
     };
     try {
-      await ghUpdate((notes) => [note, ...notes].slice(0, MAX_NOTES), "Not eklendi");
+      await ghUpdate((notes) => {
+        const next = [note, ...notes].slice(0, MAX_NOTES);
+        // Dosyayı ~800 KB altında tut: en eski kayıtları düşür.
+        while (next.length > 1 && new TextEncoder().encode(JSON.stringify(next)).length > 800000) next.pop();
+        return next;
+      }, "Not eklendi");
       setStatus(st, "Kaydedildi ✓ İş bilgisayarında Kayıtlar sekmesinde görünür.", "ok");
       $("resultText").value = ""; $("noteTitle").value = ""; $("thumbs").innerHTML = "";
       setStatus($("scanStatus"), "");
