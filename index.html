@@ -141,9 +141,11 @@
 
     <div class="card">
       <h2>Başka cihaza aktar</h2>
-      <p class="hint" style="margin-top:0">Bağlantıyı kendinize gönderin (WhatsApp, e-posta), diğer cihazda açın; ayarlar kendiliğinden kaydolur. Bağlantı anahtarları içerir, sadece kendinize gönderin.</p>
+      <p class="hint" style="margin-top:0">Bağlantı anahtarları içerir, sadece kendinize gönderin. Diğer cihazda bağlantıya tıklayınca ayarlar kendiliğinden kaydolur.</p>
+      <label for="workEmail">Kurum e-posta adresiniz</label>
+      <input id="workEmail" type="email" inputmode="email" placeholder="ad.soyad@adalet.gov.tr" autocapitalize="off" autocorrect="off">
       <div class="row" style="margin-top:10px">
-        <button id="sharePcBtn" class="primary">💻 Bilgisayar için</button>
+        <button id="sharePcBtn" class="primary">💻 Bilgisayara e-postayla gönder</button>
         <button id="sharePhoneBtn">📱 Yeni telefon için</button>
       </div>
       <div id="shareStatus" class="status"></div>
@@ -180,7 +182,8 @@
   if (settings.model === "gemini-3.8-flash") { settings.model = "gemini-3.6-flash"; saveSettingsObj(settings); }
 
   function fillSettingsForm() {
-    $("ghOwner").value = settings.ghOwner || "";
+    $("ghOwner").value = settings.ghOwner || (location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : "");
+    $("workEmail").value = settings.workEmail || "";
     $("ghRepo").value = settings.ghRepo || "el-yazisi-veri";
     $("ghToken").value = settings.ghToken || "";
     $("provider").value = settings.provider || "gemini";
@@ -191,6 +194,7 @@
   function readSettingsForm() {
     return {
       ghOwner: $("ghOwner").value.trim(),
+      workEmail: $("workEmail").value.trim(),
       ghRepo: $("ghRepo").value.trim(),
       ghToken: $("ghToken").value.trim(),
       provider: $("provider").value,
@@ -621,7 +625,24 @@ Kurallar:
     const ok = await copyText(link, btn);
     setStatus(st, ok ? "Bağlantı kopyalandı ✓ Kendinize gönderip diğer cihazda açın." : link, ok ? "ok" : "");
   }
-  $("sharePcBtn").addEventListener("click", (e) => shareSettings(false, e.currentTarget));
+  function buildSetupLink(withApiKey) {
+    const payload = { o: settings.ghOwner, r: settings.ghRepo, t: settings.ghToken };
+    if (withApiKey) Object.assign(payload, { p: settings.provider, k: settings.apiKey, m: settings.model });
+    return location.origin + location.pathname + "#kur=" + b64url(JSON.stringify(payload));
+  }
+  $("sharePcBtn").addEventListener("click", async (e) => {
+    settings = readSettingsForm(); saveSettingsObj(settings);
+    const st = $("shareStatus");
+    if (!ghReady()) { setStatus(st, "Önce GitHub bilgilerini girip kaydedin.", "err"); return; }
+    const to = settings.workEmail;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { setStatus(st, "Kurum e-posta adresinizi yazın.", "err"); return; }
+    const link = buildSetupLink(false);
+    const body = "İş bilgisayarında bu bağlantıya tıklayın, El Yazısı → Metin ayarları kendiliğinden kaydolur:\n\n" + link +
+      "\n\nSonraki girişlerde normal adres yeterli: " + location.origin + location.pathname;
+    location.href = "mailto:" + encodeURIComponent(to) + "?subject=" + encodeURIComponent("El Yazısı kurulum bağlantısı") + "&body=" + encodeURIComponent(body);
+    setStatus(st, "E-posta uygulaması açıldı, Gönder'e basın. Açılmadıysa bağlantı panoya kopyalandı; e-postaya yapıştırın.", "ok");
+    copyText(link);
+  });
   $("sharePhoneBtn").addEventListener("click", (e) => shareSettings(true, e.currentTarget));
 
   let importedMsg = "";
