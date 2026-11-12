@@ -146,7 +146,8 @@
   "use strict";
 
   // ---------- Ayarlar ----------
-  const DEFAULT_MODELS = { gemini: "gemini-3.8-flash", claude: "claude-sonnet-5-5" };
+  const DEFAULT_MODELS = { gemini: "gemini-3.6-flash", claude: "claude-sonnet-5-5" };
+  const OLD_DEFAULTS = ["gemini-3.8-flash"];
   const MODEL_HINTS = {
     gemini: "Okuma zayıf kalırsa daha güçlü bir Gemini modeli yazabilirsiniz. Ücretsiz katmanda Google gönderilen içeriği ürün geliştirmede kullanabilir; dosya içerikleri için ücretli (faturalı) anahtar önerilir.",
     claude: "Ör. claude-sonnet-5-5 veya daha güçlüsü claude-opus-5-5."
@@ -166,6 +167,7 @@
     catch { return false; }
   }
   let settings = loadSettings();
+  if (settings.model === "gemini-3.8-flash") { settings.model = "gemini-3.6-flash"; saveSettingsObj(settings); }
 
   function fillSettingsForm() {
     $("ghOwner").value = settings.ghOwner || "";
@@ -189,7 +191,7 @@
   $("provider").addEventListener("change", () => {
     const p = $("provider").value;
     const current = $("model").value.trim();
-    if (!current || Object.values(DEFAULT_MODELS).includes(current)) $("model").value = DEFAULT_MODELS[p];
+    if (!current || Object.values(DEFAULT_MODELS).includes(current) || OLD_DEFAULTS.includes(current)) $("model").value = DEFAULT_MODELS[p];
     $("modelHint").textContent = MODEL_HINTS[p];
   });
 
@@ -285,18 +287,22 @@ Kurallar:
 - Fotoğrafta kağıt dışındaki nesneleri (klavye, eşyalar vb.) yok say.`;
 
   // Yoğunluk / geçici hata: aynı modeli bekleyip tekrar dener, olmazsa yedek modele geçer.
-  const GEMINI_FALLBACKS = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.5-flash-lite"];
+  const GEMINI_FALLBACKS = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.8-flash", "gemini-3.5-flash-lite"];
+  const LAST_OK_KEY = "elyazisi.lastOkModel";
   const RETRYABLE = new Set([429, 500, 502, 503, 504]);
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   let onRetry = () => {};
 
   async function ocrGemini(b64, s) {
-    const models = [s.model, ...GEMINI_FALLBACKS].filter((m, i, a) => m && a.indexOf(m) === i);
+    let lastOk = ""; try { lastOk = localStorage.getItem(LAST_OK_KEY) || ""; } catch {}
+    const models = [lastOk, s.model, ...GEMINI_FALLBACKS].filter((m, i, a) => m && a.indexOf(m) === i);
     let lastErr;
     for (const model of models) {
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          return await ocrGeminiOnce(b64, s, model);
+          const text = await ocrGeminiOnce(b64, s, model);
+          try { localStorage.setItem(LAST_OK_KEY, model); } catch {}
+          return text;
         } catch (e) {
           lastErr = e;
           if (!RETRYABLE.has(e.status)) {
@@ -304,13 +310,13 @@ Kurallar:
             if (e.status === 404) break;
             throw e;
           }
-          if (attempt < 2) {
-            onRetry(`${model} yoğun, ${attempt + 2}. deneme…`);
-            await sleep(attempt === 0 ? 3000 : 7000);
+          if (attempt < 1) {
+            onRetry(`${model} yoğun, tekrar deneniyor…`);
+            await sleep(2500);
           }
         }
       }
-      onRetry(`${model} yanıt vermedi, yedek modele geçiliyor…`);
+      onRetry(`${model} yoğun, başka modele geçiliyor…`);
     }
     throw lastErr;
   }
@@ -397,19 +403,22 @@ Kurallar:
         const im = document.createElement("img"); im.src = preview; $("thumbs").appendChild(im);
         setStatus(st, `Sayfa ${i + 1}/${files.length} okunuyor… (10–30 sn sürebilir)`);
         onRetry = (msg) => setStatus(st, `Sayfa ${i + 1}/${files.length}: ${msg}`, "warn");
-        pieces.push(await ocr(base64));
+        const pageText = await ocr(base64);
+        pieces.push(pageText);
         onRetry = () => {};
+        const cur = $("resultText").value.trim();
+        $("resultText").value = cur ? cur + "\n\n" + pageText : pageText;
       }
-      const existing = $("resultText").value.trim();
       const combined = pieces.join("\n\n");
-      $("resultText").value = existing ? existing + "\n\n" + combined : combined;
       const unsure = (combined.match(/\[\?\]|\[okunamadı\]/g) || []).length;
       setStatus(st, unsure ? `Tamam. ${unsure} yer işaretli ([?] / [okunamadı]); kontrol edip kaydedin.` : "Tamam. Kontrol edip kaydedin.", unsure ? "warn" : "ok");
     } catch (err) {
       onRetry = () => {};
       setStatus(st, err.message || String(err), "err");
-      if (pieces.length) $("resultText").value = pieces.join("\n\n");
-      if (!pieces.length) $("retryBtn").classList.remove("hidden");
+      // Biten sayfalar kutuda kalır; yalnız kalan sayfalar tekrar denenir.
+      lastFiles = files.slice(pieces.length);
+      if (pieces.length) setStatus(st, `${pieces.length}/${files.length} sayfa okundu, kalanlar için: ` + (err.message || String(err)), "err");
+      $("retryBtn").classList.remove("hidden");
     } finally {
       $("pickBtn").disabled = false;
     }
