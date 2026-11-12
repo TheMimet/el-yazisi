@@ -191,14 +191,30 @@
     $("model").value = settings.model || DEFAULT_MODELS[$("provider").value];
     $("modelHint").textContent = MODEL_HINTS[$("provider").value];
   }
+  // Kopyala-yapıştırda gelen boşluk, satır sonu ve görünmez karakterleri at.
+  function cleanKey(v) { return (v || "").replace(/[\s\u200B-\u200D\uFEFF\u00A0]/g, ""); }
+  // Anahtarlar yalnız İngilizce harf/rakam/_ - içerir. Türkçe klavye hatalarını (İ, ı, ş…) yakala.
+  function keyProblem(label, v) {
+    if (!v) return "";
+    const bad = [...new Set(v.match(/[^A-Za-z0-9_\-]/g) || [])];
+    if (!bad.length) return "";
+    const hint = bad.some(c => "İıŞşĞğÜüÖöÇç".includes(c))
+      ? " Türkçe klavye büyük I yerine İ, küçük i yerine ı yazmış olabilir."
+      : "";
+    return `${label} geçersiz karakter içeriyor: ${bad.map(c => "“" + c + "”").join(" ")}.${hint} Elle yazmak yerine kopyala-yapıştır kullanın.`;
+  }
+  function settingsProblems(s) {
+    return [keyProblem("GitHub token", s.ghToken), keyProblem("API anahtarı", s.apiKey)].filter(Boolean);
+  }
+
   function readSettingsForm() {
     return {
       ghOwner: $("ghOwner").value.trim(),
       workEmail: $("workEmail").value.trim(),
       ghRepo: $("ghRepo").value.trim(),
-      ghToken: $("ghToken").value.trim(),
+      ghToken: cleanKey($("ghToken").value),
       provider: $("provider").value,
-      apiKey: $("apiKey").value.trim(),
+      apiKey: cleanKey($("apiKey").value),
       model: $("model").value.trim() || DEFAULT_MODELS[$("provider").value],
     };
   }
@@ -644,13 +660,19 @@ Kurallar:
 
   // ---------- Ayarlar kaydet / test ----------
   $("saveSettingsBtn").addEventListener("click", () => {
-    settings = readSettingsForm();
+    const next = readSettingsForm();
+    const probs = settingsProblems(next);
+    if (probs.length) { setStatus($("settingsStatus"), probs.join(" "), "err"); return; }
+    settings = next;
     const ok = saveSettingsObj(settings);
     setStatus($("settingsStatus"), ok ? "Kaydedildi ✓" : "Tarayıcı ayarları saklamaya izin vermiyor (gizli sekme olabilir).", ok ? "ok" : "err");
   });
   $("testBtn").addEventListener("click", async () => {
-    settings = readSettingsForm(); saveSettingsObj(settings);
     const st = $("settingsStatus");
+    const next = readSettingsForm();
+    const probs = settingsProblems(next);
+    if (probs.length) { setStatus(st, probs.join(" "), "err"); return; }
+    settings = next; saveSettingsObj(settings);
     const lines = [];
     setStatus(st, "Test ediliyor…");
     if (ghReady()) {
