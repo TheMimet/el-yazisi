@@ -528,7 +528,15 @@ Kurallar:
   }
   async function ghRead() {
     const res = await fetch(ghUrl() + "?t=" + Date.now(), { headers: ghHeaders(), cache: "no-store" });
-    if (res.status === 404) return { notes: [], sha: null };
+    if (res.status === 404) {
+      // 404 iki anlama gelir: dosya henüz yok (normal) ya da token depoyu göremiyor. Depoyu kontrol et.
+      const repoRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(settings.ghOwner)}/${encodeURIComponent(settings.ghRepo)}`,
+        { headers: ghHeaders(), cache: "no-store" });
+      if (repoRes.status === 404)
+        throw new Error(`Token “${settings.ghRepo}” deposunu göremiyor. GitHub'da token'ı açıp Repository access'e ${settings.ghRepo} deposunu ekleyin (Contents: Read and write).`);
+      if (!repoRes.ok) throw new Error(ghError(repoRes.status, {}));
+      return { notes: [], sha: null };
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(ghError(res.status, data));
     let b64 = data.content || "";
