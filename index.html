@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="El Yazısı">
+<meta name="theme-color" content="#0f172a">
+<title>El Yazısı → Metin</title>
+<style>
+  :root {
+    --bg: #0f172a; --card: #1e293b; --line: #334155; --text: #e2e8f0;
+    --muted: #94a3b8; --accent: #38bdf8; --ok: #4ade80; --err: #f87171; --warn: #fbbf24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px 16px 60px; }
+  h1 { font-size: 20px; margin: 4px 0 2px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  button, .btn { appearance: none; border: 1px solid var(--line); background: #0b1220; color: var(--text);
+    border-radius: 10px; padding: 10px 14px; font-size: 15px; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .primary { background: var(--accent); color: #062033; border-color: var(--accent); font-weight: 600; }
+  .big { width: 100%; padding: 16px; font-size: 17px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 auto; }
+  textarea { width: 100%; min-height: 220px; background: #0b1220; color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px; font: 15px/1.55 "Segoe UI", Roboto, sans-serif; resize: vertical; }
+  input, select { width: 100%; background: #0b1220; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 10px; font-size: 15px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  .status { font-size: 14px; margin: 10px 0 0; min-height: 1.2em; }
+  .status.ok { color: var(--ok); } .status.err { color: var(--err); } .status.warn { color: var(--warn); }
+  .thumbs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .thumbs img { height: 70px; border-radius: 6px; border: 1px solid var(--line); }
+  .note { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 10px; background: #0b1220; }
+  .note-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .note-title { color: var(--text); font-weight: 600; font-size: 14px; }
+  .note pre { white-space: pre-wrap; word-wrap: break-word; margin: 8px 0; font: 14px/1.5 "Segoe UI", Roboto, sans-serif; max-height: 160px; overflow: hidden; }
+  .note.open pre { max-height: none; }
+  .note-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .note-actions button { padding: 7px 12px; font-size: 14px; }
+  .copied { background: var(--ok) !important; color: #052e14 !important; border-color: var(--ok) !important; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+  .hidden { display: none !important; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tabs button { flex: 1; }
+  .tabs button.active { background: var(--accent); color: #062033; border-color: var(--accent); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>El Yazısı → Metin</h1>
+  <p class="sub">Telefonda fotoğraf çek, metne dök, kaydet. Bilgisayarda aynı sayfayı açıp kopyala.</p>
+
+  <div class="tabs">
+    <button id="tabScan" class="active">📷 Fotoğraf</button>
+    <button id="tabList">📋 Kayıtlar</button>
+    <button id="tabSettings">⚙️ Ayarlar</button>
+  </div>
+
+  <!-- FOTOĞRAF -->
+  <section id="viewScan">
+    <div class="card">
+      <input id="fileInput" type="file" accept="image/*" multiple class="hidden">
+      <button id="pickBtn" class="primary big">📷 Fotoğraf çek / seç</button>
+      <p class="hint">Birden fazla sayfa seçebilirsiniz; sırayla metne dökülüp birleştirilir.</p>
+      <div id="thumbs" class="thumbs"></div>
+      <div id="scanStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <h2>Metin <span class="hint">Kaydetmeden önce düzeltebilirsiniz</span></h2>
+      <label for="noteTitle" style="margin-top:0">Başlık (isteğe bağlı)</label>
+      <input id="noteTitle" placeholder="Örn. 2026/145 Esas – istinaf gerekçesi">
+      <label for="resultText">Metin</label>
+      <textarea id="resultText" placeholder="Döküm burada görünecek…"></textarea>
+      <p class="hint">[?] = emin olunamayan kelime, [okunamadı] = okunamayan yer. Kontrol edin.</p>
+      <div class="row" style="margin-top:10px">
+        <button id="saveBtn" class="primary">💾 Kaydet (bilgisayara gönder)</button>
+        <button id="copyCurrentBtn">Kopyala</button>
+        <button id="clearBtn">Temizle</button>
+      </div>
+      <div id="saveStatus" class="status"></div>
+    </div>
+  </section>
+
+  <!-- KAYITLAR -->
+  <section id="viewList" class="hidden">
+    <div class="card">
+      <h2>Kayıtlı metinler <button id="refreshBtn">↻ Yenile</button></h2>
+      <div id="listStatus" class="status"></div>
+      <div id="notes"></div>
+    </div>
+  </section>
+
+  <!-- AYARLAR -->
+  <section id="viewSettings" class="hidden">
+    <div class="card">
+      <h2>Kayıt yeri (GitHub – özel depo)</h2>
+      <p class="hint">Metinler sizin <b>özel (private)</b> deponuzda <code>notlar.json</code> dosyasında tutulur. Telefon ve iş bilgisayarı aynı bilgileri girer.</p>
+      <label for="ghOwner">GitHub kullanıcı adı</label>
+      <input id="ghOwner" placeholder="TheMimet" autocapitalize="off" autocorrect="off">
+      <label for="ghRepo">Özel depo adı</label>
+      <input id="ghRepo" placeholder="el-yazisi-veri" autocapitalize="off" autocorrect="off">
+      <label for="ghToken">GitHub erişim anahtarı (fine-grained token)</label>
+      <input id="ghToken" type="password" placeholder="github_pat_…" autocapitalize="off" autocorrect="off">
+      <p class="hint">Yalnızca bu depo için, “Contents: Read and write” izniyle oluşturun.</p>
+    </div>
+
+    <div class="card">
+      <h2>Metne dökme servisi <span class="hint">Sadece telefonda gerekli</span></h2>
+      <label for="provider">Servis</label>
+      <select id="provider">
+        <option value="gemini">Google Gemini</option>
+        <option value="claude">Anthropic Claude</option>
+      </select>
+      <label for="apiKey">API anahtarı</label>
+      <input id="apiKey" type="password" placeholder="Gemini: AIza…  /  Claude: sk-ant-…" autocapitalize="off" autocorrect="off">
+      <label for="model">Model</label>
+      <input id="model" autocapitalize="off" autocorrect="off">
+      <p class="hint" id="modelHint"></p>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button id="saveSettingsBtn" class="primary">Ayarları kaydet</button>
+        <button id="testBtn">Bağlantıyı test et</button>
+      </div>
+      <div id="settingsStatus" class="status"></div>
+      <p class="hint">Anahtarlar yalnızca bu cihazın tarayıcısında saklanır, sayfanın kodunda yer almaz.</p>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- Ayarlar ----------
+  const DEFAULT_MODELS = { gemini: "gemini-3.8-flash", claude: "claude-sonnet-5-5" };
+  const MODEL_HINTS = {
+    gemini: "Okuma zayıf kalırsa daha güçlü bir Gemini modeli yazabilirsiniz. Ücretsiz katmanda Google gönderilen içeriği ürün geliştirmede kullanabilir; dosya içerikleri için ücretli (faturalı) anahtar önerilir.",
+    claude: "Ör. claude-sonnet-5-5 veya daha güçlüsü claude-opus-5-5."
+  };
+  const STORE_KEY = "elyazisi.settings.v1";
+  const DATA_PATH = "notlar.json";
+  const MAX_NOTES = 300;
+
+  const $ = (id) => document.getElementById(id);
+
+  function loadSettings() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {}; }
+    catch { return {}; }
+  }
+  function saveSettingsObj(s) {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); return true; }
+    catch { return false; }
+  }
+  let settings = loadSettings();
+
+  function fillSettingsForm() {
+    $("ghOwner").value = settings.ghOwner || "";
+    $("ghRepo").value = settings.ghRepo || "el-yazisi-veri";
+    $("ghToken").value = settings.ghToken || "";
+    $("provider").value = settings.provider || "gemini";
+    $("apiKey").value = settings.apiKey || "";
+    $("model").value = settings.model || DEFAULT_MODELS[$("provider").value];
+    $("modelHint").textContent = MODEL_HINTS[$("provider").value];
+  }
+  function readSettingsForm() {
+    return {
+      ghOwner: $("ghOwner").value.trim(),
+      ghRepo: $("ghRepo").value.trim(),
+      ghToken: $("ghToken").value.trim(),
+      provider: $("provider").value,
+      apiKey: $("apiKey").value.trim(),
+      model: $("model").value.trim() || DEFAULT_MODELS[$("provider").value],
+    };
+  }
+  $("provider").addEventListener("change", () => {
+    const p = $("provider").value;
+    const current = $("model").value.trim();
+    if (!current || Object.values(DEFAULT_MODELS).includes(current)) $("model").value = DEFAULT_MODELS[p];
+    $("modelHint").textContent = MODEL_HINTS[p];
+  });
+
+  function setStatus(el, msg, kind = "") {
+    el.textContent = msg || "";
+    el.className = "status" + (kind ? " " + kind : "");
+  }
+
+  // ---------- Sekmeler ----------
+  const tabs = { Scan: "viewScan", List: "viewList", Settings: "viewSettings" };
+  function showTab(name) {
+    for (const [k, view] of Object.entries(tabs)) {
+      $("tab" + k).classList.toggle("active", k === name);
+      $(view).classList.toggle("hidden", k !== name);
+    }
+    if (name === "List") loadNotes();
+    if (name === "Settings") fillSettingsForm();
+    try { localStorage.setItem("elyazisi.tab", name); } catch {}
+  }
+  for (const k of Object.keys(tabs)) $("tab" + k).addEventListener("click", () => showTab(k));
+
+  // ---------- Yardımcılar ----------
+  function utf8ToB64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  function b64ToUtf8(b64) {
+    const bin = atob(b64.replace(/\s/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+  function fmtDate(iso) {
+    try {
+      return new Date(iso).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    } catch { return iso; }
+  }
+  async function copyText(text, btn) {
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; }
+    catch {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand("copy"); } catch {}
+      ta.remove();
+    }
+    if (btn) {
+      const old = btn.textContent;
+      btn.textContent = ok ? "✓ Kopyalandı" : "Kopyalanamadı";
+      btn.classList.toggle("copied", ok);
+      setTimeout(() => { btn.textContent = old; btn.classList.remove("copied"); }, 1500);
+    }
+    return ok;
+  }
+
+  // Fotoğrafı küçült + JPEG'e çevir (iPhone HEIC dahil). Uzun kenar en fazla 2200 px.
+  function fileToJpegBase64(file, maxSide = 2200, quality = 0.88) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+        const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        const dataUrl = c.toDataURL("image/jpeg", quality);
+        resolve({ base64: dataUrl.split(",")[1], preview: dataUrl });
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Fotoğraf açılamadı")); };
+      img.src = url;
+    });
+  }
+
+  // ---------- Metne dökme ----------
+  const OCR_PROMPT = `Bu fotoğraf, bir Türk mahkemesinde kullanılan, Türkçe el yazısıyla yazılmış bir taslak metindir (ör. gerekçeli karar, istinaf incelemesi notu).
+Görevin: kağıttaki el yazısını olduğu gibi, eksiksiz ve sadakatle metne dökmek.
+
+Kurallar:
+- Sadece döküm metnini yaz. Açıklama, başlık, yorum, tırnak veya kod bloğu ekleme.
+- Kelimeleri yazıldığı gibi aktar; anlamı değiştirme, cümle ekleme veya özetleme.
+- Türkçe karakterleri (ç, ğ, ı, İ, ö, ş, ü) doğru kullan.
+- Satır sonunda bölünmüş kelimeleri birleştir. Kağıttaki satır kırılımlarını değil, paragraf yapısını koru: aynı paragrafın satırlarını tek satırda birleştir, paragraflar arasında bir boş satır bırak.
+- Altı çizili veya ayrı satırda tek başına duran başlıkları kendi satırında bırak.
+- Tarih, esas/karar numarası, rakam ve yer adlarını (ör. Karatay/Konya) aynen yaz.
+- Emin olamadığın kelimeden hemen sonra [?] yaz. Hiç okunamayan yer için [okunamadı] yaz.
+- Kağıt fotoğrafta kesilmişse, görünen kısmı yaz ve kesik yeri […] ile göster.
+- Üstü çizilmiş (iptal edilmiş) yazıları yazma.
+- Fotoğrafta kağıt dışındaki nesneleri (klavye, eşyalar vb.) yok say.`;
+
+  async function ocrGemini(b64, s) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.model)}:generateContent`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-goog-api-key": s.apiKey },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [
+          { inline_data: { mime_type: "image/jpeg", data: b64 } },
+          { text: OCR_PROMPT },
+        ] }],
+        generationConfig: { temperature: 0 },
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error("Gemini: " + (data.error?.message || res.status));
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    const text = parts.filter(p => !p.thought).map(p => p.text || "").join("").trim();
+    if (!text) throw new Error("Gemini boş cevap döndü (" + (data.candidates?.[0]?.finishReason || "?") + ")");
+    return text;
+  }
+
+  async function ocrClaude(b64, s) {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": s.apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: s.model,
+        max_tokens: 4096,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } },
+          { type: "text", text: OCR_PROMPT },
+        ] }],
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error("Claude: " + (data.error?.message || res.status));
+    const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("").trim();
+    if (!text) throw new Error("Claude boş cevap döndü");
+    return text;
+  }
+
+  function ocr(b64) {
+    if (!settings.apiKey) throw new Error("Önce Ayarlar'dan API anahtarını girin.");
+    return settings.provider === "claude" ? ocrClaude(b64, settings) : ocrGemini(b64, settings);
+  }
+
+  $("pickBtn").addEventListener("click", () => $("fileInput").click());
+  $("fileInput").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    const st = $("scanStatus");
+    if (!settings.apiKey) { setStatus(st, "Önce Ayarlar sekmesinden API anahtarını girin.", "err"); return; }
+
+    $("pickBtn").disabled = true;
+    $("thumbs").innerHTML = "";
+    const pieces = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        setStatus(st, `Sayfa ${i + 1}/${files.length} hazırlanıyor…`);
+        const { base64, preview } = await fileToJpegBase64(files[i]);
+        const im = document.createElement("img"); im.src = preview; $("thumbs").appendChild(im);
+        setStatus(st, `Sayfa ${i + 1}/${files.length} okunuyor… (10–30 sn sürebilir)`);
+        pieces.push(await ocr(base64));
+      }
+      const existing = $("resultText").value.trim();
+      const combined = pieces.join("\n\n");
+      $("resultText").value = existing ? existing + "\n\n" + combined : combined;
+      const unsure = (combined.match(/\[\?\]|\[okunamadı\]/g) || []).length;
+      setStatus(st, unsure ? `Tamam. ${unsure} yer işaretli ([?] / [okunamadı]); kontrol edip kaydedin.` : "Tamam. Kontrol edip kaydedin.", unsure ? "warn" : "ok");
+    } catch (err) {
+      setStatus(st, err.message || String(err), "err");
+      if (pieces.length) $("resultText").value = pieces.join("\n\n");
+    } finally {
+      $("pickBtn").disabled = false;
+    }
+  });
+
+  $("copyCurrentBtn").addEventListener("click", (e) => copyText($("resultText").value, e.currentTarget));
+  $("clearBtn").addEventListener("click", () => {
+    $("resultText").value = ""; $("noteTitle").value = ""; $("thumbs").innerHTML = "";
+    setStatus($("scanStatus"), ""); setStatus($("saveStatus"), "");
+  });
+
+  // ---------- GitHub depolama ----------
+  function ghReady() { return settings.ghOwner && settings.ghRepo && settings.ghToken; }
+  function ghUrl() {
+    return `https://api.github.com/repos/${encodeURIComponent(settings.ghOwner)}/${encodeURIComponent(settings.ghRepo)}/contents/${DATA_PATH}`;
+  }
+  function ghHeaders() {
+    return {
+      "accept": "application/vnd.github+json",
+      "authorization": "Bearer " + settings.ghToken,
+      "x-github-api-version": "2022-11-28",
+    };
+  }
+  async function ghRead() {
+    const res = await fetch(ghUrl() + "?t=" + Date.now(), { headers: ghHeaders(), cache: "no-store" });
+    if (res.status === 404) return { notes: [], sha: null };
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(ghError(res.status, data));
+    let notes = [];
+    try { notes = JSON.parse(b64ToUtf8(data.content || "")); } catch {}
+    return { notes: Array.isArray(notes) ? notes : [], sha: data.sha };
+  }
+  async function ghWrite(notes, sha, message) {
+    const body = { message, content: utf8ToB64(JSON.stringify(notes, null, 1)) };
+    if (sha) body.sha = sha;
+    const res = await fetch(ghUrl(), { method: "PUT", headers: { ...ghHeaders(), "content-type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { const e = new Error(ghError(res.status, data)); e.status = res.status; throw e; }
+    return data.content?.sha;
+  }
+  function ghError(status, data) {
+    if (status === 401) return "GitHub anahtarı geçersiz veya süresi dolmuş.";
+    if (status === 403) return "GitHub anahtarının bu depoya yazma izni yok (Contents: Read and write).";
+    if (status === 404) return "Depo bulunamadı. Kullanıcı adı / depo adı / anahtar iznini kontrol edin.";
+    return "GitHub hatası " + status + (data?.message ? ": " + data.message : "");
+  }
+  // Okuma-değiştirme-yazma; başka cihaz aynı anda yazdıysa (409/422) bir kez daha dener.
+  async function ghUpdate(mutator, message) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { notes, sha } = await ghRead();
+      const next = mutator(notes.slice());
+      try { await ghWrite(next, sha, message); return next; }
+      catch (e) { if ((e.status === 409 || e.status === 422) && attempt < 2) continue; throw e; }
+    }
+  }
+
+  $("saveBtn").addEventListener("click", async () => {
+    const st = $("saveStatus");
+    const text = $("resultText").value.trim();
+    if (!text) { setStatus(st, "Kaydedilecek metin yok.", "err"); return; }
+    if (!ghReady()) { setStatus(st, "Önce Ayarlar'dan GitHub bilgilerini girin.", "err"); return; }
+    $("saveBtn").disabled = true;
+    setStatus(st, "Kaydediliyor…");
+    const note = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      title: $("noteTitle").value.trim(),
+      text,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      await ghUpdate((notes) => [note, ...notes].slice(0, MAX_NOTES), "Not eklendi");
+      setStatus(st, "Kaydedildi ✓ İş bilgisayarında Kayıtlar sekmesinde görünür.", "ok");
+      $("resultText").value = ""; $("noteTitle").value = ""; $("thumbs").innerHTML = "";
+      setStatus($("scanStatus"), "");
+    } catch (err) {
+      setStatus(st, err.message || String(err), "err");
+    } finally {
+      $("saveBtn").disabled = false;
+    }
+  });
+
+  // ---------- Liste ----------
+  let loading = false;
+  async function loadNotes() {
+    const st = $("listStatus");
+    if (!ghReady()) { setStatus(st, "Önce Ayarlar'dan GitHub bilgilerini girin.", "err"); $("notes").innerHTML = ""; return; }
+    if (loading) return;
+    loading = true;
+    setStatus(st, "Yükleniyor…");
+    try {
+      const { notes } = await ghRead();
+      renderNotes(notes);
+      setStatus(st, `${notes.length} kayıt · ${new Date().toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })} itibarıyla`, "");
+    } catch (err) {
+      setStatus(st, err.message || String(err), "err");
+    } finally { loading = false; }
+  }
+
+  function renderNotes(notes) {
+    const box = $("notes");
+    box.innerHTML = "";
+    if (!notes.length) { box.innerHTML = '<div class="empty">Henüz kayıt yok.</div>'; return; }
+    for (const n of notes) {
+      const el = document.createElement("div");
+      el.className = "note";
+      const head = document.createElement("div"); head.className = "note-head";
+      const left = document.createElement("div");
+      const t = document.createElement("div"); t.className = "note-title"; t.textContent = n.title || "(başlıksız)";
+      const d = document.createElement("div"); d.textContent = fmtDate(n.createdAt);
+      left.append(t, d);
+      head.append(left);
+      const pre = document.createElement("pre"); pre.textContent = n.text;
+      const actions = document.createElement("div"); actions.className = "note-actions";
+      const bCopy = document.createElement("button"); bCopy.className = "primary"; bCopy.textContent = "Kopyala";
+      bCopy.onclick = () => copyText(n.text, bCopy);
+      const bOpen = document.createElement("button"); bOpen.textContent = "Tamamını göster";
+      bOpen.onclick = () => { el.classList.toggle("open"); bOpen.textContent = el.classList.contains("open") ? "Daralt" : "Tamamını göster"; };
+      const bDel = document.createElement("button"); bDel.textContent = "Sil";
+      bDel.onclick = async () => {
+        if (!confirm("Bu kayıt silinsin mi?")) return;
+        bDel.disabled = true;
+        try {
+          const next = await ghUpdate((arr) => arr.filter(x => x.id !== n.id), "Not silindi");
+          renderNotes(next);
+        } catch (err) { setStatus($("listStatus"), err.message || String(err), "err"); bDel.disabled = false; }
+      };
+      actions.append(bCopy, bOpen, bDel);
+      el.append(head, pre, actions);
+      box.appendChild(el);
+    }
+  }
+  $("refreshBtn").addEventListener("click", loadNotes);
+  // Kayıtlar açıkken her 20 saniyede bir yenile (bilgisayarda yeni kayıt kendiliğinden gelsin).
+  setInterval(() => {
+    if (!$("viewList").classList.contains("hidden") && document.visibilityState === "visible") loadNotes();
+  }, 20000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !$("viewList").classList.contains("hidden")) loadNotes();
+  });
+
+  // ---------- Ayarlar kaydet / test ----------
+  $("saveSettingsBtn").addEventListener("click", () => {
+    settings = readSettingsForm();
+    const ok = saveSettingsObj(settings);
+    setStatus($("settingsStatus"), ok ? "Kaydedildi ✓" : "Tarayıcı ayarları saklamaya izin vermiyor (gizli sekme olabilir).", ok ? "ok" : "err");
+  });
+  $("testBtn").addEventListener("click", async () => {
+    settings = readSettingsForm(); saveSettingsObj(settings);
+    const st = $("settingsStatus");
+    const lines = [];
+    setStatus(st, "Test ediliyor…");
+    if (ghReady()) {
+      try { const { notes } = await ghRead(); lines.push(`GitHub: bağlandı ✓ (${notes.length} kayıt)`); }
+      catch (e) { lines.push("GitHub: " + e.message); }
+    } else lines.push("GitHub: bilgiler eksik");
+    if (settings.apiKey) {
+      try {
+        // 1x1 beyaz piksel ile anahtar/model kontrolü
+        const c = document.createElement("canvas"); c.width = c.height = 8;
+        const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 8, 8);
+        await ocr(c.toDataURL("image/jpeg").split(",")[1]).catch(e => { if (!/boş cevap/.test(e.message)) throw e; });
+        lines.push(`${settings.provider === "claude" ? "Claude" : "Gemini"}: anahtar ve model çalışıyor ✓`);
+      } catch (e) { lines.push(e.message); }
+    } else lines.push("Metne dökme: API anahtarı girilmemiş (bilgisayarda gerekmez)");
+    const bad = lines.some(l => !/✓|gerekmez/.test(l));
+    setStatus(st, lines.join(" · "), bad ? "err" : "ok");
+  });
+
+  // ---------- Başlangıç ----------
+  fillSettingsForm();
+  let startTab = "Scan";
+  try { startTab = localStorage.getItem("elyazisi.tab") || "Scan"; } catch {}
+  if (!ghReady() && !settings.apiKey) startTab = "Settings";
+  showTab(tabs[startTab] ? startTab : "Scan");
+})();
+</script>
+</body>
+</html>
