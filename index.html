@@ -193,10 +193,11 @@
   }
   // Kopyala-yapıştırda gelen boşluk, satır sonu ve görünmez karakterleri at.
   function cleanKey(v) { return (v || "").replace(/[\s\u200B-\u200D\uFEFF\u00A0]/g, ""); }
-  // Anahtarlar yalnız İngilizce harf/rakam/_ - içerir. Türkçe klavye hatalarını (İ, ı, ş…) yakala.
+  // Türkçe klavye hatalarını (İ, ı, ş…) yakala; nokta, tire vb. normal karakterlere izin ver.
   function keyProblem(label, v) {
     if (!v) return "";
-    const bad = [...new Set(v.match(/[^A-Za-z0-9_\-]/g) || [])];
+    // Sadece tarayıcının başlığa koyamadığı karakterleri (ASCII dışı: İ, ı, ş, …) reddet.
+    const bad = [...new Set(v.match(/[^\x21-\x7E]/g) || [])];
     if (!bad.length) return "";
     const hint = bad.some(c => "İıŞşĞğÜüÖöÇç".includes(c))
       ? " Türkçe klavye büyük I yerine İ, küçük i yerine ı yazmış olabilir."
