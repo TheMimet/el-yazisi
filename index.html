@@ -138,6 +138,16 @@
       <div id="settingsStatus" class="status"></div>
       <p class="hint">Anahtarlar yalnızca bu cihazın tarayıcısında saklanır, sayfanın kodunda yer almaz.</p>
     </div>
+
+    <div class="card">
+      <h2>Başka cihaza aktar</h2>
+      <p class="hint" style="margin-top:0">Bağlantıyı kendinize gönderin (WhatsApp, e-posta), diğer cihazda açın; ayarlar kendiliğinden kaydolur. Bağlantı anahtarları içerir, sadece kendinize gönderin.</p>
+      <div class="row" style="margin-top:10px">
+        <button id="sharePcBtn" class="primary">💻 Bilgisayar için</button>
+        <button id="sharePhoneBtn">📱 Yeni telefon için</button>
+      </div>
+      <div id="shareStatus" class="status"></div>
+    </div>
   </section>
 </main>
 
@@ -587,12 +597,63 @@ Kurallar:
     setStatus(st, lines.join(" · "), bad ? "err" : "ok");
   });
 
+  // ---------- Ayar aktarma bağlantısı ----------
+  function b64url(str) { return utf8ToB64(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+  function fromB64url(str) {
+    let b = str.replace(/-/g, "+").replace(/_/g, "/");
+    while (b.length % 4) b += "=";
+    return b64ToUtf8(b);
+  }
+  async function shareSettings(withApiKey, btn) {
+    settings = readSettingsForm(); saveSettingsObj(settings);
+    const st = $("shareStatus");
+    if (!ghReady()) { setStatus(st, "Önce GitHub bilgilerini girip kaydedin.", "err"); return; }
+    const payload = { o: settings.ghOwner, r: settings.ghRepo, t: settings.ghToken };
+    if (withApiKey) {
+      if (!settings.apiKey) { setStatus(st, "API anahtarı girilmemiş.", "err"); return; }
+      Object.assign(payload, { p: settings.provider, k: settings.apiKey, m: settings.model });
+    }
+    const link = location.origin + location.pathname + "#kur=" + b64url(JSON.stringify(payload));
+    if (navigator.share) {
+      try { await navigator.share({ title: "El Yazısı ayarları", url: link }); setStatus(st, "Paylaşıldı ✓", "ok"); return; }
+      catch (e) { if (e && e.name === "AbortError") return; }
+    }
+    const ok = await copyText(link, btn);
+    setStatus(st, ok ? "Bağlantı kopyalandı ✓ Kendinize gönderip diğer cihazda açın." : link, ok ? "ok" : "");
+  }
+  $("sharePcBtn").addEventListener("click", (e) => shareSettings(false, e.currentTarget));
+  $("sharePhoneBtn").addEventListener("click", (e) => shareSettings(true, e.currentTarget));
+
+  let importedMsg = "";
+  (function importFromHash() {
+    const m = location.hash.match(/^#kur=([A-Za-z0-9_-]+)/);
+    if (!m) return;
+    history.replaceState(null, "", location.pathname + location.search);
+    try {
+      const d = JSON.parse(fromB64url(m[1]));
+      const next = { ...settings };
+      if (d.o) next.ghOwner = d.o;
+      if (d.r) next.ghRepo = d.r;
+      if (d.t) next.ghToken = d.t;
+      if (d.k) { next.apiKey = d.k; next.provider = d.p || "gemini"; next.model = d.m || DEFAULT_MODELS[next.provider]; }
+      settings = next;
+      importedMsg = saveSettingsObj(settings)
+        ? "Ayarlar aktarıldı ✓" + (d.k ? "" : " (bu cihazda sadece Kayıtlar kullanılabilir)")
+        : "Ayarlar alındı ama tarayıcı saklamıyor (gizli sekme olabilir).";
+    } catch { importedMsg = "Aktarım bağlantısı bozuk, telefondan yeniden oluşturun."; }
+  })();
+
   // ---------- Başlangıç ----------
   fillSettingsForm();
   let startTab = "Scan";
   try { startTab = localStorage.getItem("elyazisi.tab") || "Scan"; } catch {}
   if (!ghReady() && !settings.apiKey) startTab = "Settings";
+  if (importedMsg) startTab = settings.apiKey ? "Scan" : "List";
   showTab(tabs[startTab] ? startTab : "Scan");
+  if (importedMsg) {
+    const target = startTab === "List" ? $("listStatus") : $("scanStatus");
+    setTimeout(() => setStatus(target, importedMsg, /✓/.test(importedMsg) ? "ok" : "err"), startTab === "List" ? 1500 : 0);
+  }
 })();
 </script>
 </body>
