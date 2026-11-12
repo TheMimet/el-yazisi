@@ -41,8 +41,7 @@
   .note { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 10px; background: #0b1220; }
   .note-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
   .note-title { color: var(--text); font-weight: 600; font-size: 14px; }
-  .note pre { white-space: pre-wrap; word-wrap: break-word; margin: 8px 0; font: 14px/1.5 "Segoe UI", Roboto, sans-serif; max-height: 160px; overflow: hidden; }
-  .note.open pre { max-height: none; }
+  .note pre { white-space: pre-wrap; word-wrap: break-word; margin: 8px 0; font: 14px/1.5 "Segoe UI", Roboto, sans-serif; }
   .note-actions { display: flex; gap: 6px; flex-wrap: wrap; }
   .note-actions button { padding: 7px 12px; font-size: 14px; }
   .copied { background: var(--ok) !important; color: #052e14 !important; border-color: var(--ok) !important; }
@@ -642,8 +641,6 @@ Kurallar:
       const actions = document.createElement("div"); actions.className = "note-actions";
       const bCopy = document.createElement("button"); bCopy.className = "primary"; bCopy.textContent = "Kopyala";
       bCopy.onclick = () => copyText(n.text, bCopy);
-      const bOpen = document.createElement("button"); bOpen.textContent = "Tamamını göster";
-      bOpen.onclick = () => { el.classList.toggle("open"); bOpen.textContent = el.classList.contains("open") ? "Daralt" : "Tamamını göster"; };
       const bDel = document.createElement("button"); bDel.textContent = "Sil";
       bDel.onclick = async () => {
         if (!confirm("Bu kayıt silinsin mi?")) return;
@@ -653,7 +650,7 @@ Kurallar:
           renderNotes(next);
         } catch (err) { setStatus($("listStatus"), err.message || String(err), "err"); bDel.disabled = false; }
       };
-      actions.append(bCopy, bOpen, bDel);
+      actions.append(bCopy, bDel);
       el.append(head, pre, actions);
       box.appendChild(el);
     }
